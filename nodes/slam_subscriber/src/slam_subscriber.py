@@ -169,8 +169,6 @@ class SLAM_Subscriber:
         transform[1,0] = 1
         transform[2,1] = 1
 
-        pose_mat = transform @ pose_mat
-        #pose_mat[2,-1] = -1*pose_mat[2,-1]
         pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
         print("pose mat")
         print(pose_mat)
