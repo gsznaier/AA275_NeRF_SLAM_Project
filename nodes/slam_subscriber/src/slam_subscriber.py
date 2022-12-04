@@ -75,12 +75,9 @@ def mat2vect(transform):
     convert given 4x4 transform matrix into a (x,y,z,eu_ang) pose
     """
 
-    print(transform)
     r = R.from_matrix(transform[:3,:3])
     pose = (transform[0,-1], transform[1,-1], transform[2,-1], r.as_euler('XYZ'))
     
-    print(pose)
-
     return pose
 
 #########################################################
@@ -168,12 +165,21 @@ class SLAM_Subscriber:
         transform[0,0] = 0
         transform[1,1] = 0
         transform[2,2] = 0
-        transform[0,1] = 1
-        transform[1,2] = 1
-        transform[2,0] = 1
+        transform[0,2] = 1
+        transform[1,0] = 1
+        transform[2,1] = 1
 
         pose_mat = transform @ pose_mat
-        #pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
+        #pose_mat[2,-1] = -1*pose_mat[2,-1]
+        pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
+        print("pose mat")
+        print(pose_mat)
+        print(pose_mat[2,-1])
+        #pose_mat[2,-1] = pose_mat[2,-1]
+        pose_mat[0,-1] = -1*pose_mat[0,-1]
+        pose_mat[1,-1] = -1*pose_mat[1,-1]
+        print(pose_mat)
+        print("")
 
         self.trans_pose = pose_mat #np.linalg.inv(pose_mat)
         
@@ -234,8 +240,8 @@ class SLAM_Subscriber:
 
         ### write all data to file ###
         data_dict = {
-           "camera_angle_x": 2 * np.atan2(self.w, 2*self.cam_K[0]),
-           "camera_angle_y": 2 * np.atan2(self.h, 2*self.cam_K[4]),
+           "camera_angle_x": 2 * np.arctan2(self.w, 2*self.cam_K[0]),
+           "camera_angle_y": 2 * np.arctan2(self.h, 2*self.cam_K[4]),
            "fl_x": self.cam_K[0],
            "fl_y": self.cam_K[4],
            "k1": self.cam_D[0],
@@ -270,7 +276,7 @@ if __name__ == '__main__':
         'node_name': "slam_subscriber",
         'queue_size': 10,
         'pub_rate': 2,
-        'data_dir': "/home/chris/Project/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
+        'data_dir': "/home/gsznaier/Desktop/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
         'counter_max': 395,
     }
     try:
