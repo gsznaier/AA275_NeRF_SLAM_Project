@@ -155,7 +155,7 @@ class SLAM_Subscriber:
     def cam_info_callback(self, data):
         # TODO:
         self.cam_D = data.D
-        self.cam_K = data.K # TODO: is this correct?
+        self.cam_K = data.K
         self.h = data.height
         self.w = data.width
     
@@ -171,8 +171,9 @@ class SLAM_Subscriber:
         transform[0,1] = 1
         transform[1,2] = 1
         transform[2,0] = 1
-        
-        pose_mat = transform @ pose_mat #np.linalg.inv(transform) @ pose_mat @ transform
+
+        pose_mat = transform @ pose_mat
+        #pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
 
         self.trans_pose = pose_mat #np.linalg.inv(pose_mat)
         
@@ -232,20 +233,20 @@ class SLAM_Subscriber:
         print("Counter =", self.counter)
 
         ### write all data to file ###
-        data_dict = { # TODO: fill with proper values
-           "camera_angle_x": 1, # TODO: update
-           "camera_angle_y": 2, # TODO: update
-           "fl_x": 3, # TODO: update
-           "fl_y": 4, # TODO: update
+        data_dict = {
+           "camera_angle_x": 2 * np.atan2(self.w, 2*self.cam_K[0]),
+           "camera_angle_y": 2 * np.atan2(self.h, 2*self.cam_K[4]),
+           "fl_x": self.cam_K[0],
+           "fl_y": self.cam_K[4],
            "k1": self.cam_D[0],
            "k2": self.cam_D[1],
            "p1": self.cam_D[2],
            "p2": self.cam_D[3],
-           "cx": 5, # TODO: update
-           "cy": 6, # TODO: update
+           "cx": self.cam_K[2],
+           "cy": self.cam_K[5],
            "w": self.w,
            "h": self.h,
-           "aabb_scale": 4, #TODO: 16?
+           "aabb_scale": 16,
            "frames": frames[:self.counter], # exclude duplicate frames at end
         }
         json_obj = json.dumps(data_dict, indent=4)
