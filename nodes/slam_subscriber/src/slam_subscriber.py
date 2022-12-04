@@ -70,6 +70,7 @@ def euler2mat(pose):
 
     return transform
 
+
 def mat2vect(transform):
     """
     convert given 4x4 transform matrix into a (x,y,z,eu_ang) pose
@@ -79,6 +80,7 @@ def mat2vect(transform):
     pose = (transform[0,-1], transform[1,-1], transform[2,-1], r.as_euler('XYZ'))
     
     return pose
+
 
 #########################################################
 # Subscriber Class
@@ -112,7 +114,6 @@ class SLAM_Subscriber:
         self.pose_pub = rospy.Publisher(config['pub_topic_name'], PoseStamped, queue_size=config['queue_size'])
 
 
-
     def pose_callback(self, data):
         rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got pose data from orb_slam.")
         # read position and orientation from pose message
@@ -126,7 +127,6 @@ class SLAM_Subscriber:
         eu_ang = quat2euler([q1, q2, q3, q0])
         # set member attribute to store this pose data
         self.slam_pose = (x, y, z, eu_ang)
-        
 
 
     def img_callback(self, data):
@@ -150,12 +150,12 @@ class SLAM_Subscriber:
 
 
     def cam_info_callback(self, data):
-        # TODO:
         self.cam_D = data.D
         self.cam_K = data.K
         self.h = data.height
         self.w = data.width
-    
+
+
     # transform slam pose to frame expected by NeRF
     def transform_pose(self):
         # slam_pose: (x, y, z, eu_ang)
@@ -170,16 +170,12 @@ class SLAM_Subscriber:
         transform[2,1] = 1
 
         pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
-        print("pose mat")
-        print(pose_mat)
-        print(pose_mat[2,-1])
-        #pose_mat[2,-1] = pose_mat[2,-1]
+
+        # swap x and y motion to match direction of camera motion for NeRF 
         pose_mat[0,-1] = -1*pose_mat[0,-1]
         pose_mat[1,-1] = -1*pose_mat[1,-1]
-        print(pose_mat)
-        print("")
 
-        self.trans_pose = pose_mat #np.linalg.inv(pose_mat)
+        self.trans_pose = pose_mat
         
     def pub_pose_msg(self, pose):
         # given pose is in the format (x, y, z, eu_ang)
@@ -218,7 +214,7 @@ class SLAM_Subscriber:
                     frame_dict = {
                         "file_path": self.img_subpath.format(self.counter),
                         "sharpness": self.sharpness,
-                        "transform_matrix": self.trans_pose.tolist(),
+                        "transform_matrix": self.trans_pose,
                     }
                     frames.append(frame_dict)
 
@@ -232,6 +228,20 @@ class SLAM_Subscriber:
                 break
 
             rate.sleep()
+
+        # shift all poses by centroid
+        xyz_start = frames[0]["transform_matrix"][0:3, -1]
+        xyz_end = frames[-1]["transform_matrix"][0:3, -1]
+        centroid = (xyz_start + xyz_end) / 2
+        frames_centered = []
+        for d in frames:
+            d["transform_matrix"][0:3, -1] -= centroid
+            d_centered = {
+                "file_path": d["file_path"],
+                "sharpness": d["sharpness"],
+                "transform_matrix": d["transform_matrix"],
+            }
+            frames_centered.append(d_centered)
 
         print("Number of frames:", len(frames))
         print("Counter =", self.counter)
@@ -274,7 +284,7 @@ if __name__ == '__main__':
         'node_name': "slam_subscriber",
         'queue_size': 10,
         'pub_rate': 2,
-        'data_dir': "/home/gsznaier/Desktop/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
+        'data_dir': "/home/chris/Project/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
         'counter_max': 395,
     }
     try:
