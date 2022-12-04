@@ -239,7 +239,7 @@ class SLAM_Subscriber:
             d_centered = {
                 "file_path": d["file_path"],
                 "sharpness": d["sharpness"],
-                "transform_matrix": d["transform_matrix"],
+                "transform_matrix": d["transform_matrix"].tolist(),
             }
             frames_centered.append(d_centered)
 
