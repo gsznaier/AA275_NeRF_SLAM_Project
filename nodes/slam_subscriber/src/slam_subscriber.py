@@ -168,12 +168,13 @@ class SLAM_Subscriber:
         transform[0,0] = 0
         transform[1,1] = 0
         transform[2,2] = 0
-        transform[0,2] = 1
-        transform[1,0] = 1
-        transform[2,1] = 1
-        pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
+        transform[0,1] = 1
+        transform[1,2] = 1
+        transform[2,0] = 1
+        
+        pose_mat = transform @ pose_mat #np.linalg.inv(transform) @ pose_mat @ transform
 
-        self.trans_pose = pose_mat#np.linalg.inv(pose_mat)
+        self.trans_pose = pose_mat #np.linalg.inv(pose_mat)
         
     def pub_pose_msg(self, pose):
         # given pose is in the format (x, y, z, eu_ang)
