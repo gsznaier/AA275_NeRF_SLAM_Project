@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import print_function
 
 import sys, os
@@ -54,7 +54,7 @@ def euler2quat(x, y, z):
     return r.as_quat()
 
 
-def euler2mat(pose): #TODO: @Gadi write this :)
+def euler2mat(pose):
     """
     Convert given pose in format (x, y, z, eu_ang) to the
     tranformation matrix format that NeRF wants.
@@ -107,6 +107,7 @@ class SLAM_Subscriber:
         
         # camera info parameters
         self.cam_D = None
+        self.cam_K = None
         self.h = None
         self.w = None
 
@@ -117,7 +118,6 @@ class SLAM_Subscriber:
 
     def pose_callback(self, data):
         rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got pose data from orb_slam.")
-        self.counter += 1
         # read position and orientation from pose message
         x = data.pose.position.x
         y = data.pose.position.y
@@ -133,6 +133,7 @@ class SLAM_Subscriber:
 
 
     def img_callback(self, data):
+        self.counter += 1
         rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got image data from orb_slam.")
         self.img_fullpath = self.config['data_dir'] + self.img_subpath.format(self.counter)
         try:
@@ -154,15 +155,13 @@ class SLAM_Subscriber:
     def cam_info_callback(self, data):
         # TODO:
         self.cam_D = data.D
+        self.cam_K = data.K # TODO: is this correct?
         self.h = data.height
         self.w = data.width
     
     # transform slam pose to frame expected by NeRF
     def transform_pose(self):
-        # TODO: 
-
         # slam_pose: (x, y, z, eu_ang)
-        #self.trans_pose = self.slam_pose
         pose_mat = euler2mat(self.slam_pose)
 
         transform = np.eye(4)
@@ -223,8 +222,13 @@ class SLAM_Subscriber:
             except CvBridgeError as e:
                 print(e)
 
+            if self.counter >= self.config['counter_max']:
+                break
+
             rate.sleep()
 
+        print("Number of frames:", len(frames))
+        print("Counter =", self.counter)
 
         ### write all data to file ###
         data_dict = { # TODO: fill with proper values
@@ -241,10 +245,10 @@ class SLAM_Subscriber:
            "w": self.w,
            "h": self.h,
            "aabb_scale": 4, #TODO: 16?
-           "frames": frames,
+           "frames": frames[:self.counter], # exclude duplicate frames at end
         }
         json_obj = json.dumps(data_dict, indent=4)
-        trans_file = self.config['data_dir'] + "tranforms.json"
+        trans_file = self.config['data_dir'] + "transforms.json"
         with open(trans_file, "w") as jsonfile:
             jsonfile.write(json_obj)
         
@@ -265,6 +269,7 @@ if __name__ == '__main__':
         'queue_size': 10,
         'pub_rate': 2,
         'data_dir': "/home/chris/Project/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
+        'counter_max': 395,
     }
     try:
         slam_sub = SLAM_Subscriber(config)

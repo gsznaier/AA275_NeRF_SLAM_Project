@@ -21,5 +21,5 @@ In the subscriber, edit the config['data_dir'] at the bottom of the script
 with the desired location where you want the images and transforms.json to
 be saved.
 
-Then run the subscriber //TODO
+Then run the subscriber `rosrun slam_subscriber slam_subscriber.py`
 
