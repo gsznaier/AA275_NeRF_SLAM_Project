@@ -233,9 +233,11 @@ class SLAM_Subscriber:
         xyz_start = frames[0]["transform_matrix"][0:3, -1]
         xyz_end = frames[-1]["transform_matrix"][0:3, -1]
         centroid = (xyz_start + xyz_end) / 2
+        centroid_norm = np.linalg.norm(centroid)
         frames_centered = []
         for d in frames:
             d["transform_matrix"][0:3, -1] -= centroid
+            d["transform_matrix"][0:3, -1] /= centroid_norm
             d_centered = {
                 "file_path": d["file_path"],
                 "sharpness": d["sharpness"],
