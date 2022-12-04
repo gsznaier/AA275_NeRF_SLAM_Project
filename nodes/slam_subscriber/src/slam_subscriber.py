@@ -10,6 +10,8 @@ from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge, CvBridgeError
 from matplotlib import pyplot as plt
+#import matplotlib
+#matplotlib.use('Agg')
 import numpy as np
 import math
 from scipy.spatial.transform import Rotation as R
@@ -59,7 +61,6 @@ def euler2mat(pose): #TODO: @Gadi write this :)
     Return a 4x4 np array.
     """
     x, y, z, eu_ang = pose # unpack given pose
-    print(eu_ang)
     r = R.from_euler('XYZ', eu_ang)
     transform = np.eye(4)
     transform[:3,:3] = r.as_matrix()
@@ -67,9 +68,20 @@ def euler2mat(pose): #TODO: @Gadi write this :)
     transform[1,-1] = y
     transform[2,-1] = z
 
-    print(transform)
-
     return transform
+
+def mat2vect(transform):
+    """
+    convert given 4x4 transform matrix into a (x,y,z,eu_ang) pose
+    """
+
+    print(transform)
+    r = R.from_matrix(transform[:3,:3])
+    pose = (transform[0,-1], transform[1,-1], transform[2,-1], r.as_euler('XYZ'))
+    
+    print(pose)
+
+    return pose
 
 #########################################################
 # Subscriber Class
@@ -150,8 +162,19 @@ class SLAM_Subscriber:
         # TODO: 
 
         # slam_pose: (x, y, z, eu_ang)
-        self.trans_pose = self.slam_pose
-        #self.trans_pose = euler2mat(self.slam_pose)
+        #self.trans_pose = self.slam_pose
+        pose_mat = euler2mat(self.slam_pose)
+
+        transform = np.eye(4)
+        transform[0,0] = 0
+        transform[1,1] = 0
+        transform[2,2] = 0
+        transform[0,2] = 1
+        transform[1,0] = 1
+        transform[2,1] = 1
+        pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
+
+        self.trans_pose = pose_mat#np.linalg.inv(pose_mat)
         
     def pub_pose_msg(self, pose):
         # given pose is in the format (x, y, z, eu_ang)
@@ -185,12 +208,12 @@ class SLAM_Subscriber:
             try:
                 if self.slam_pose is not None:
                     self.transform_pose() # updates self.trans_pose
-                    self.pub_pose_msg(self.trans_pose) # publish transformed pose
-                    mat = euler2mat(self.trans_pose) # convert to transformation matrix
+                    self.pub_pose_msg(mat2vect(self.trans_pose))
+                    
                     frame_dict = {
                         "file_path": self.img_subpath.format(self.counter),
                         "sharpness": self.sharpness,
-                        "transform_matrix": mat.tolist(),
+                        "transform_matrix": self.trans_pose.tolist(),
                     }
                     frames.append(frame_dict)
 
@@ -223,7 +246,7 @@ class SLAM_Subscriber:
         json_obj = json.dumps(data_dict, indent=4)
         trans_file = self.config['data_dir'] + "tranforms.json"
         with open(trans_file, "w") as jsonfile:
-           jsonfile.write(json_obj)
+            jsonfile.write(json_obj)
         
         print("\nComplete.\n")
 
