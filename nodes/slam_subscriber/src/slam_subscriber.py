@@ -239,7 +239,7 @@ class SLAM_Subscriber:
             d_centered = {
                 "file_path": d["file_path"],
                 "sharpness": d["sharpness"],
-                "transform_matrix": d["transform_matrix"],
+                "transform_matrix": d["transform_matrix"].tolist(),
             }
             frames_centered.append(d_centered)
 
@@ -261,7 +261,7 @@ class SLAM_Subscriber:
            "w": self.w,
            "h": self.h,
            "aabb_scale": 16,
-           "frames": frames[:self.counter], # exclude duplicate frames at end
+           "frames": frames_centered[:self.counter], # exclude duplicate frames at end
         }
         json_obj = json.dumps(data_dict, indent=4)
         trans_file = self.config['data_dir'] + "transforms.json"
