@@ -6,6 +6,7 @@ import rospy
 from std_msgs.msg import String, Header
 from geometry_msgs.msg import PoseStamped
 from matplotlib import pyplot as plt
+from mpl_toolkits import mplot3d
 import numpy as np
 import math
 from scipy.spatial.transform import Rotation as R
@@ -78,7 +79,7 @@ class KalmanFilter(object):
 
         self.x = np.zeros((dim_x, 1)) # state
         self.P = np.eye(dim_x) # covariance
-        self.Q = 0.001 * np.eye(dim_x) # propagation noise
+        self.Q = 0.1 * np.eye(dim_x) # propagation noise
         
         d = np.array([np.cos(self.x[4])*np.cos(self.x[5]),
                       np.cos(self.x[4])*np.sin(self.x[5]),
@@ -87,7 +88,7 @@ class KalmanFilter(object):
         self.F[:3,-1] = self.dt * np.squeeze(d)
         
         self.H = np.block([np.eye(dim_y), np.zeros((dim_y,1))]) # measurement matrix
-        self.R = np.eye(dim_y) # measurement uncertainty
+        self.R = 10 * np.eye(dim_y) # measurement uncertainty
         
     def predict(self):
         # prediction step
@@ -121,6 +122,8 @@ def callback(data):
     global idx, config, measurement
     rospy.loginfo(rospy.get_caller_id()+"   "+str(idx))
     idx += 1
+    if idx == 1: # skip first value because it's bogus
+        return
     # Read position and orientation from Pose message,
     # add noise and pass to measurement global variable
     x = data.pose.position.x + np.random.normal(0, 0.1)
@@ -146,8 +149,10 @@ def subscribe(config):
     
     kf_x_vec = []
     kf_y_vec = []
+    kf_z_vec = []
     orb_x_vec = []
     orb_y_vec = []
+    orb_z_vec = []
 
     # Replace with publisher loop which calls predict/update 
     # in Kalman filter and publishes the estimated pose
@@ -160,8 +165,10 @@ def subscribe(config):
         # append to global vars for plotting purposes
         kf_x_vec.append(kf.x[0])
         kf_y_vec.append(kf.x[1])
+        kf_z_vec.append(kf.x[2])
         orb_x_vec.append(measurement[0])
         orb_y_vec.append(measurement[1])
+        orb_z_vec.append(measurement[2])
         
         # step Kalman Filter
         kf.predict()
@@ -186,17 +193,31 @@ def subscribe(config):
         rospy.loginfo("Processed slam pose and image ".format(idx))
 
         rate.sleep()
-    return kf_x_vec, kf_y_vec, orb_x_vec, orb_y_vec
+    return kf_x_vec, kf_y_vec, kf_z_vec, orb_x_vec, orb_y_vec, orb_z_vec
 
 if __name__ == '__main__':
     try:
-        kf_x_vec, kf_y_vec, orb_x_vec, orb_y_vec = subscribe(config)
+        kf_x_vec, kf_y_vec, kf_z_vec, orb_x_vec, orb_y_vec, orb_z_vec = subscribe(config)
     except rospy.ROSInterruptException:
         pass
-    plt.plot(kf_x_vec, kf_y_vec) 
-    plt.plot(orb_x_vec, orb_y_vec)
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.scatter3D(kf_x_vec, kf_y_vec, kf_z_vec)#, c=kf_z_vec, cmap='Greens', marker='o')
+    ax.scatter3D(orb_x_vec, orb_y_vec, orb_z_vec)#, marker='+')
+    ax.legend(['kalman filter','orb slam'])
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    ax.set_title('ORB SLAM and Kalman Filter, Positions')
+    plt.savefig("kf_vs_slam_3D.png")
+    plt.show()
+
+    fig = plt.figure()
+    plt.plot(kf_x_vec, kf_y_vec)#, c=kf_z_vec, cmap='Greens', marker='o')
+    plt.plot(orb_x_vec, orb_y_vec)#, marker='+')
     plt.legend(['kalman filter','orb slam'])
     plt.xlabel('x')
     plt.ylabel('y')
-    plt.title('ORB SLAM and Kalman Filter, x vs. y')
+    plt.title('ORB SLAM and Kalman Filter, Positions')
+    plt.savefig("kf_vs_slam_2D.png")
     plt.show()
