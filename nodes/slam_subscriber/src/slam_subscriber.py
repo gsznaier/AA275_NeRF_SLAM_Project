@@ -169,7 +169,7 @@ class SLAM_Subscriber:
         transform[1,0] = 1
         transform[2,1] = 1
 
-        pose_mat = np.linalg.inv(transform) @ pose_mat @ transform
+        pose_mat = pose_mat @ transform
 
         # swap x and y motion to match direction of camera motion for NeRF 
         pose_mat[0,-1] = -1*pose_mat[0,-1]
@@ -202,6 +202,7 @@ class SLAM_Subscriber:
         rate = rospy.Rate(self.rate)
 
         frames = [] # to store list of data required for transforms.json
+        tf_mat_ts = [] # to just store the translation part of the transform matrix
 
         # loop through all orb slam images, storing the output pose
         # transformation matrix each time
@@ -218,6 +219,8 @@ class SLAM_Subscriber:
                     }
                     frames.append(frame_dict)
 
+                    tf_mat_ts.append(self.trans_pose[0:3, -1])
+
                     rospy.loginfo("Processed slam pose and image ".format(id=self.counter))
                 else:
                     rospy.loginfo("Subscribed SLAM pose is currently None")
@@ -228,16 +231,28 @@ class SLAM_Subscriber:
                 break
 
             rate.sleep()
+        
+        tf_mat_ts = np.array(tf_mat_ts)
 
-        # shift all poses by centroid
-        xyz_start = frames[0]["transform_matrix"][0:3, -1]
-        xyz_end = frames[-1]["transform_matrix"][0:3, -1]
-        centroid = (xyz_start + xyz_end) / 2
-        centroid_norm = np.linalg.norm(centroid)
+        ### shift all poses by centroid and scale to bounding box ###
+        centroid = np.mean(tf_mat_ts, axis=0)
+        tf_mat_ts = tf_mat_ts - centroid
+
+        bound = 2 # plus/minus bounding cube
+        x_min, x_max = np.min(tf_mat_ts[:,0]), np.max(tf_mat_ts[:,0])
+        y_min, y_max = np.min(tf_mat_ts[:,1]), np.max(tf_mat_ts[:,1])
+        z_min, z_max = np.min(tf_mat_ts[:,2]), np.max(tf_mat_ts[:,2])
+
         frames_centered = []
         for d in frames:
-            d["transform_matrix"][0:3, -1] -= centroid
-            d["transform_matrix"][0:3, -1] /= centroid_norm
+            d["transform_matrix"][0:3, -1] -= centroid # offset
+            # scale to bounding box using bound*(2x-1) formula
+            x = (d["transform_matrix"][0, -1] - x_min) / (x_max - x_min)
+            y = (d["transform_matrix"][1, -1] - y_min) / (y_max - y_min)
+            z = (d["transform_matrix"][2, -1] - z_min) / (z_max - z_min)
+            d["transform_matrix"][0, -1] = bound * (2 * x - 1)
+            d["transform_matrix"][1, -1] = bound * (2 * y - 1)
+            d["transform_matrix"][2, -1] = bound * (2 * z - 1)
             d_centered = {
                 "file_path": d["file_path"],
                 "sharpness": d["sharpness"],
