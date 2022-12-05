@@ -10,6 +10,7 @@ from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge, CvBridgeError
 from matplotlib import pyplot as plt
+from mpl_toolkits import mplot3d
 #import matplotlib
 #matplotlib.use('Agg')
 import numpy as np
@@ -167,7 +168,7 @@ class SLAM_Subscriber:
 
 
     def pose_callback(self, data):
-        rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got pose data from orb_slam.")
+        rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got pose data from kalman filter.")
         # read position and orientation from pose message
         x = data.pose.position.x
         y = data.pose.position.y
@@ -183,7 +184,7 @@ class SLAM_Subscriber:
 
     def img_callback(self, data):
         self.counter += 1
-        rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got image data from orb_slam.")
+        rospy.loginfo(rospy.get_caller_id() + "   " + str(self.counter) + " Got image data from image publisher.")
         self.img_fullpath = self.config['data_dir'] + self.img_subpath.format(self.counter)
         try:
             # Convert your ROS Image message to OpenCV2
@@ -273,7 +274,7 @@ class SLAM_Subscriber:
 
                     rospy.loginfo("Processed slam pose and image ".format(id=self.counter))
                 else:
-                    rospy.loginfo("Subscribed SLAM pose is currently None")
+                    rospy.loginfo("Subscribed Kalman Filter pose is currently None")
             except CvBridgeError as e:
                 print(e)
 
@@ -349,7 +350,7 @@ if __name__ == '__main__':
     # Populate the config dictionary with any
     # configuration parameters that you need
     config = {
-        'pose_sub_topic_name': "/orb_slam2_stereo/pose",
+        'pose_sub_topic_name': "/kalman_filter/pose", # "/orb_slam2_stereo/pose",
         'img_sub_topic_name': "/cam_front/right/image_rect_color",
         'cam_info_sub_topic_name': "/image_right/camera_info",
         # 'img_sub_topic_name': "/cam_front/left/image_rect_color",
