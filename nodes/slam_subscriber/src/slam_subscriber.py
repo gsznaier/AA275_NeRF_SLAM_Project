@@ -21,6 +21,25 @@ from scipy.spatial.transform import Rotation as R
 # HELPER FUNCIONS
 #########################################################
 
+rot_x = lambda phi : np.array([
+                                [1,0,0,0],
+                                [0,np.cos(phi),-np.sin(phi),0],
+                                [0,np.sin(phi), np.cos(phi),0],
+                                [0,0,0,1]])
+
+rot_y = lambda th : np.array([
+                                [np.cos(th),0,-np.sin(th),0],
+                                [0,1,0,0],
+                                [np.sin(th),0, np.cos(th),0],
+                                [0,0,0,1]])
+
+rot_z = lambda psi : np.array([
+                                [np.cos(psi),-np.sin(psi),0, 0], 
+                                [np.sin(psi), np.cos(psi),0, 0], 
+                                [0, 0, 1, 0],
+                                [0,0,0,1]])
+
+
 def quat2euler(q):
     """Convert quaternion to Euler angles
     Parameters
@@ -82,6 +101,38 @@ def mat2vect(transform):
     return pose
 
 
+def plot_transforms(tfs, step=4, scale=.2, title='title'):
+
+    origin = np.array([0, 0, 0, 1])
+
+    # Define basis vectors.
+    e1 = np.array([scale, 0, 0, 1])
+    e2 = np.array([0, scale, 0, 1])
+    e3 = np.array([0, 0, scale, 1])
+
+    ow = tfs@origin
+    w1, w2, w3 = [tfs @ ee for ee in (e1, e2, e3)]
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    ax.view_init(elev=45., azim=45)
+    ax.scatter(ow[0::step,0], ow[0::step,1], ow[0::step,2], c='k')
+        
+    for i in range(tfs.shape[0]):
+        if i%step == 0:
+            ax.text(ow[i,0],ow[i,1], ow[i,2]+.01, "t="+str(i)) 
+            ax.plot([ow[i,0], w1[i,0]], [ow[i,1], w1[i,1]], [ow[i,2], w1[i,2]], c='r')
+            ax.text(w1[i,0],w1[i,1], w1[i,2], "x") 
+            ax.plot([ow[i,0], w2[i,0]], [ow[i,1], w2[i,1]], [ow[i,2], w2[i,2]], c='g')
+            ax.text(w2[i,0],w2[i,1], w2[i,2], "y")
+            ax.plot([ow[i,0], w3[i,0]], [ow[i,1], w3[i,1]], [ow[i,2], w3[i,2]], c='b')
+            ax.text(w3[i,0],w3[i,1], w3[i,2], "z")
+    ax.set_xlabel('$X$')
+    ax.set_ylabel('$Y$')
+    ax.set_zlabel('$Z$')
+    plt.title(title)
+    plt.show()
+
 #########################################################
 # Subscriber Class
 #########################################################
@@ -96,6 +147,7 @@ class SLAM_Subscriber:
         # pose parameters before and after transformation
         self.slam_pose = None
         self.trans_pose = None
+        self.untrans_pose = None
 
         # image store path
         self.img_subpath = "images/{:05d}.jpg"
@@ -161,19 +213,14 @@ class SLAM_Subscriber:
         # slam_pose: (x, y, z, eu_ang)
         pose_mat = euler2mat(self.slam_pose)
 
-        transform = np.eye(4)
-        transform[0,0] = 0
-        transform[1,1] = 0
-        transform[2,2] = 0
-        transform[0,2] = 1
-        transform[1,0] = 1
-        transform[2,1] = 1
+        self.untrans_pose = pose_mat
+        pose_mat = pose_mat @ rot_x(np.pi/2) @ rot_y(np.pi/2)
 
-        pose_mat = pose_mat @ transform
+        #pose_mat = pose_mat @ transform
 
         # swap x and y motion to match direction of camera motion for NeRF 
-        pose_mat[0,-1] = -1*pose_mat[0,-1]
-        pose_mat[1,-1] = -1*pose_mat[1,-1]
+        #pose_mat[0,-1] = -1*pose_mat[0,-1]
+        #pose_mat[1,-1] = -1*pose_mat[1,-1]
 
         self.trans_pose = pose_mat
         
@@ -206,12 +253,15 @@ class SLAM_Subscriber:
 
         # loop through all orb slam images, storing the output pose
         # transformation matrix each time
+        tfs = []
+        untfs = []
         while not rospy.is_shutdown():
             try:
                 if self.slam_pose is not None:
                     self.transform_pose() # updates self.trans_pose
                     self.pub_pose_msg(mat2vect(self.trans_pose))
-                    
+                    untfs.append(self.untrans_pose)
+                    tfs.append(self.trans_pose)    
                     frame_dict = {
                         "file_path": self.img_subpath.format(self.counter),
                         "sharpness": self.sharpness,
@@ -232,27 +282,34 @@ class SLAM_Subscriber:
 
             rate.sleep()
         
+        tfs = np.asarray(tfs)
+        untfs = np.asarray(untfs)
+        plot_transforms(untfs,title='SLAM')
+        plot_transforms(tfs, title='NeRF')
+        
+
         tf_mat_ts = np.array(tf_mat_ts)
+
 
         ### shift all poses by centroid and scale to bounding box ###
         centroid = np.mean(tf_mat_ts, axis=0)
-        tf_mat_ts = tf_mat_ts - centroid
+        tf_mat_ts[:,:2] = tf_mat_ts[:,:2] - centroid[:2]
 
         bound = 2 # plus/minus bounding cube
-        x_min, x_max = np.min(tf_mat_ts[:,0]), np.max(tf_mat_ts[:,0])
-        y_min, y_max = np.min(tf_mat_ts[:,1]), np.max(tf_mat_ts[:,1])
-        z_min, z_max = np.min(tf_mat_ts[:,2]), np.max(tf_mat_ts[:,2])
+        #x_min, x_max = np.min(tf_mat_ts[:,0]), np.max(tf_mat_ts[:,0])
+        #y_min, y_max = np.min(tf_mat_ts[:,1]), np.max(tf_mat_ts[:,1])
+        #z_min, z_max = np.min(tf_mat_ts[:,2]), np.max(tf_mat_ts[:,2])
 
         frames_centered = []
         for d in frames:
             d["transform_matrix"][0:3, -1] -= centroid # offset
             # scale to bounding box using bound*(2x-1) formula
-            x = (d["transform_matrix"][0, -1] - x_min) / (x_max - x_min)
-            y = (d["transform_matrix"][1, -1] - y_min) / (y_max - y_min)
-            z = (d["transform_matrix"][2, -1] - z_min) / (z_max - z_min)
-            d["transform_matrix"][0, -1] = bound * (2 * x - 1)
-            d["transform_matrix"][1, -1] = bound * (2 * y - 1)
-            d["transform_matrix"][2, -1] = bound * (2 * z - 1)
+            #x = (d["transform_matrix"][0, -1] - x_min) / (x_max - x_min)
+            #y = (d["transform_matrix"][1, -1] - y_min) / (y_max - y_min)
+            #z = (d["transform_matrix"][2, -1] - z_min) / (z_max - z_min)
+            #d["transform_matrix"][0, -1] = bound * (2 * x - 1)
+            #d["transform_matrix"][1, -1] = bound * (2 * y - 1)
+            #d["transform_matrix"][2, -1] = bound * (2 * z - 1)
             d_centered = {
                 "file_path": d["file_path"],
                 "sharpness": d["sharpness"],
@@ -301,7 +358,7 @@ if __name__ == '__main__':
         'node_name': "slam_subscriber",
         'queue_size': 10,
         'pub_rate': 2,
-        'data_dir': "/home/chris/Project/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
+        'data_dir': "/home/gsznaier/Desktop/catkin_ws/src/AA275_NeRF_SLAM_Project/data/village_kitti/",
         'counter_max': 395,
     }
     try:
